@@ -1,6 +1,12 @@
-import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+  doublePrecision,
+  index,
+  integer,
+  pgTable,
+  text,
+} from "drizzle-orm/pg-core";
 
-export const courierJobs = sqliteTable(
+export const courierJobs = pgTable(
   "courier_jobs",
   {
     id: text("id").primaryKey(),
@@ -23,16 +29,14 @@ export const courierJobs = sqliteTable(
     vehicle: text("vehicle").notNull(),
     priority: text("priority").notNull(),
     packageProfile: text("package_profile").notNull(),
-    actualDesi: real("actual_desi"),
-    appliedDesi: real("applied_desi").notNull(),
-    distanceKm: real("distance_km"),
+    actualDesi: doublePrecision("actual_desi"),
+    appliedDesi: doublePrecision("applied_desi").notNull(),
+    distanceKm: doublePrecision("distance_km"),
     note: text("note").notNull().default(""),
-    netPrice: real("net_price").notNull(),
-    vatRate: real("vat_rate").notNull().default(0.2),
+    netPrice: doublePrecision("net_price").notNull(),
+    vatRate: doublePrecision("vat_rate").notNull().default(0.2),
     priceDate: text("price_date").notNull(),
-    proformaIncluded: integer("proforma_included", { mode: "boolean" })
-      .notNull()
-      .default(false),
+    proformaIncluded: integer("proforma_included").notNull().default(0),
     proformaAddedAt: text("proforma_added_at"),
   },
   (table) => [

@@ -1,69 +1,4 @@
-const createJobsTableSql = `
-  CREATE TABLE IF NOT EXISTS courier_jobs (
-    id TEXT PRIMARY KEY NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    job_date TEXT NOT NULL,
-    month_key TEXT NOT NULL,
-    firm TEXT NOT NULL,
-    customer_title TEXT NOT NULL,
-    tax_office TEXT NOT NULL DEFAULT '',
-    tax_number TEXT NOT NULL DEFAULT '',
-    customer_address TEXT NOT NULL DEFAULT '',
-    contact_name TEXT NOT NULL DEFAULT '',
-    contact_phone TEXT NOT NULL DEFAULT '',
-    order_no TEXT NOT NULL DEFAULT '',
-    departure TEXT NOT NULL,
-    departure_zone TEXT NOT NULL,
-    arrival TEXT NOT NULL,
-    arrival_zone TEXT NOT NULL,
-    vehicle TEXT NOT NULL,
-    priority TEXT NOT NULL,
-    package_profile TEXT NOT NULL,
-    actual_desi REAL,
-    applied_desi REAL NOT NULL,
-    distance_km REAL,
-    note TEXT NOT NULL DEFAULT '',
-    net_price REAL NOT NULL,
-    vat_rate REAL NOT NULL DEFAULT 0.2,
-    price_date TEXT NOT NULL,
-    proforma_included INTEGER NOT NULL DEFAULT 0,
-    proforma_added_at TEXT
-  )
-`;
-
-let schemaPromise: Promise<void> | null = null;
-
-async function getDatabase() {
-  const { env } = await import("cloudflare:workers");
-  const database = env.DB as D1Database | undefined;
-  if (!database) {
-    throw new Error("Kalıcı iş veritabanı kullanılamıyor.");
-  }
-  return database;
-}
-
-async function ensureSchema(database: D1Database) {
-  schemaPromise ??= database
-    .batch([
-      database.prepare(createJobsTableSql),
-      database.prepare(
-        "CREATE INDEX IF NOT EXISTS courier_jobs_month_idx ON courier_jobs (month_key)",
-      ),
-      database.prepare(
-        "CREATE INDEX IF NOT EXISTS courier_jobs_firm_month_idx ON courier_jobs (firm, month_key)",
-      ),
-      database.prepare(
-        "CREATE INDEX IF NOT EXISTS courier_jobs_proforma_idx ON courier_jobs (proforma_included)",
-      ),
-    ])
-    .then(() => undefined)
-    .catch((error) => {
-      schemaPromise = null;
-      throw error;
-    });
-  return schemaPromise;
-}
+import { ensureJobsSchema, getSql } from "../../../db";
 
 function cleanText(value: unknown, maxLength = 500) {
   return String(value ?? "").trim().replace(/\s+/g, " ").slice(0, maxLength);
@@ -133,14 +68,12 @@ function errorResponse(error: unknown, status = 400) {
 
 export async function GET() {
   try {
-    const database = await getDatabase();
-    await ensureSchema(database);
-    const result = await database
-      .prepare(
-        "SELECT * FROM courier_jobs ORDER BY job_date DESC, created_at DESC",
-      )
-      .all<Record<string, unknown>>();
-    return Response.json({ jobs: (result.results ?? []).map(serializeJob) });
+    const database = getSql();
+    await ensureJobsSchema(database);
+    const rows = (await database.unsafe(
+      "SELECT * FROM courier_jobs ORDER BY job_date DESC, created_at DESC",
+    )) as unknown as Array<Record<string, unknown>>;
+    return Response.json({ jobs: rows.map(serializeJob) });
   } catch (error) {
     return errorResponse(error, 500);
   }
@@ -149,8 +82,8 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as Record<string, unknown>;
-    const database = await getDatabase();
-    await ensureSchema(database);
+    const database = getSql();
+    await ensureJobsSchema(database);
 
     const jobDate = requiredText(body.jobDate, "İş tarihi", 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(jobDate)) {
@@ -161,21 +94,20 @@ export async function POST(request: Request) {
     const now = new Date().toISOString();
     const vatRate = requiredNumber(body.vatRate ?? 0.2, "KDV oranı");
 
-    await database
-      .prepare(
-        `INSERT INTO courier_jobs (
-          id, created_at, updated_at, job_date, month_key, firm,
-          customer_title, tax_office, tax_number, customer_address,
-          contact_name, contact_phone, order_no, departure, departure_zone,
-          arrival, arrival_zone, vehicle, priority, package_profile,
-          actual_desi, applied_desi, distance_km, note, net_price, vat_rate,
-          price_date, proforma_included, proforma_added_at
-        ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-          ?, ?, ?, ?, ?, ?, ?, 0, NULL
-        )`,
-      )
-      .bind(
+    const rows = (await database.unsafe(
+      `INSERT INTO courier_jobs (
+        id, created_at, updated_at, job_date, month_key, firm,
+        customer_title, tax_office, tax_number, customer_address,
+        contact_name, contact_phone, order_no, departure, departure_zone,
+        arrival, arrival_zone, vehicle, priority, package_profile,
+        actual_desi, applied_desi, distance_km, note, net_price, vat_rate,
+        price_date, proforma_included, proforma_added_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+        $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26,
+        $27, 0, NULL
+      ) RETURNING *`,
+      [
         id,
         now,
         now,
@@ -203,14 +135,13 @@ export async function POST(request: Request) {
         requiredNumber(body.netPrice, "KDV hariç fiyat"),
         vatRate,
         requiredText(body.priceDate, "Fiyat tarihi", 16),
-      )
-      .run();
+      ],
+    )) as unknown as Array<Record<string, unknown>>;
 
-    const row = await database
-      .prepare("SELECT * FROM courier_jobs WHERE id = ?")
-      .bind(id)
-      .first<Record<string, unknown>>();
-    return Response.json({ job: row ? serializeJob(row) : null }, { status: 201 });
+    return Response.json(
+      { job: rows[0] ? serializeJob(rows[0]) : null },
+      { status: 201 },
+    );
   } catch (error) {
     return errorResponse(error);
   }
@@ -227,18 +158,15 @@ export async function PATCH(request: Request) {
     }
     const included = Boolean(body.proformaIncluded);
     const now = new Date().toISOString();
-    const database = await getDatabase();
-    await ensureSchema(database);
-    const placeholders = ids.map(() => "?").join(", ");
-    await database
-      .prepare(
-        `UPDATE courier_jobs
-         SET proforma_included = ?, proforma_added_at = ?, updated_at = ?
-         WHERE id IN (${placeholders})`,
-      )
-      .bind(included ? 1 : 0, included ? now : null, now, ...ids)
-      .run();
-    return Response.json({ updated: ids.length });
+    const database = getSql();
+    await ensureJobsSchema(database);
+    const result = await database.unsafe(
+      `UPDATE courier_jobs
+       SET proforma_included = $1, proforma_added_at = $2, updated_at = $3
+       WHERE id = ANY($4::text[])`,
+      [included ? 1 : 0, included ? now : null, now, ids],
+    );
+    return Response.json({ updated: result.count });
   } catch (error) {
     return errorResponse(error);
   }
@@ -253,14 +181,13 @@ export async function DELETE(request: Request) {
     if (ids.length === 0 || ids.length > 100) {
       throw new Error("Silinecek iş seçilmedi.");
     }
-    const database = await getDatabase();
-    await ensureSchema(database);
-    const placeholders = ids.map(() => "?").join(", ");
-    await database
-      .prepare(`DELETE FROM courier_jobs WHERE id IN (${placeholders})`)
-      .bind(...ids)
-      .run();
-    return Response.json({ deleted: ids.length });
+    const database = getSql();
+    await ensureJobsSchema(database);
+    const result = await database.unsafe(
+      "DELETE FROM courier_jobs WHERE id = ANY($1::text[])",
+      [ids],
+    );
+    return Response.json({ deleted: result.count });
   } catch (error) {
     return errorResponse(error);
   }

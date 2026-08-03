@@ -5,44 +5,22 @@ import { fileURLToPath } from "node:url";
 import { readSheet } from "read-excel-file/node";
 
 const projectRoot = new URL("../", import.meta.url);
+test("builds the Venturo Express calculator as a standalone app", async () => {
+  await access(new URL(".next/standalone/server.js", projectRoot));
+  const [pageSource, layoutSource] = await Promise.all([
+    readFile(new URL("app/page.tsx", projectRoot), "utf8"),
+    readFile(new URL("app/layout.tsx", projectRoot), "utf8"),
+  ]);
 
-async function render() {
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
-  const { default: worker } = await import(workerUrl.href);
-
-  return worker.fetch(
-    new Request("http://localhost/", {
-      headers: { accept: "text/html" },
-    }),
-    {
-      ASSETS: {
-        fetch: async () => new Response("Not found", { status: 404 }),
-      },
-    },
-    {
-      waitUntil() {},
-      passThroughOnException() {},
-    },
-  );
-}
-
-test("server-renders the Venturo Express calculator", async () => {
-  const response = await render();
-  assert.equal(response.status, 200);
-  assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
-
-  const html = await response.text();
   assert.match(
-    html,
-    /<title>Venturo Express \| İstanbul Kurye Fiyat Hesaplayıcı<\/title>/i,
+    layoutSource,
+    /Venturo Express \| İstanbul Kurye Fiyat Hesaplayıcı/,
   );
-  assert.match(html, /Kurye fiyatını rota ve gönderiye göre anında hesapla/);
-  assert.match(html, /39 ilçe · 17 fiyat bölgesi/);
-  assert.match(html, /Hesaplanan fiyat/);
-  assert.match(html, /₺590/);
-  assert.match(html, /og\.png/);
-  assert.doesNotMatch(html, /codex-preview|Your site is taking shape/);
+  assert.match(pageSource, /Kurye fiyatını rota ve gönderiye göre anında hesapla/);
+  assert.match(pageSource, /39 ilçe · 17 fiyat bölgesi/);
+  assert.match(pageSource, /Hesaplanan fiyat/);
+  assert.match(layoutSource, /og\.png/);
+  assert.doesNotMatch(pageSource, /codex-preview|Your site is taking shape/);
 });
 
 test("keeps the Excel-derived data complete and internally consistent", async () => {

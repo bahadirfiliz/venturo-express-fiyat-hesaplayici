@@ -1,0 +1,12 @@
+.git
+.gitignore
+.next
+.wrangler
+dist
+node_modules
+npm-debug.log*
+pnpm-debug.log*
+.env*
+*.tsbuildinfo
+Dockerfile
+docker-compose.yml

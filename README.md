@@ -30,6 +30,16 @@ pnpm dev
 Portal sabit olarak [http://localhost:3010](http://localhost:3010) adresinde
 çalışır.
 
+Tekli iş ve proforma kayıtları için `DATABASE_URL` değişkeniyle bir PostgreSQL
+bağlantısı verilmelidir.
+
+## Coolify
+
+Repo kökündeki `docker-compose.yml`, uygulamayı ve kalıcı PostgreSQL servisini
+birlikte çalıştırır. Coolify kaynağı Docker Compose build pack ile `main`
+branch'inden oluşturulabilir; veritabanı parolası `SERVICE_PASSWORD_POSTGRES`
+değişkeniyle otomatik üretilir.
+
 ## Kontroller
 
 ```bash
@@ -43,4 +53,4 @@ komutu kullanılabilir.
 
 ## Teknoloji
 
-Next.js uyumlu Vinext, React, TypeScript, Cloudflare D1, Drizzle ORM ve pnpm.
+Next.js, React, TypeScript, PostgreSQL, Drizzle ORM, Docker ve pnpm.
