@@ -1,4 +1,5 @@
 import { ensureJobsSchema, getSql } from "../../../db";
+import { apiAccessError } from "../../lib/auth/session";
 
 function cleanText(value: unknown, maxLength = 500) {
   return String(value ?? "").trim().replace(/\s+/g, " ").slice(0, maxLength);
@@ -67,6 +68,8 @@ function errorResponse(error: unknown, status = 400) {
 }
 
 export async function GET() {
+  const access = await apiAccessError(["admin"]);
+  if (access.response) return access.response;
   try {
     const database = getSql();
     await ensureJobsSchema(database);
@@ -80,6 +83,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const access = await apiAccessError(["admin"]);
+  if (access.response) return access.response;
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const database = getSql();
@@ -148,6 +153,8 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const access = await apiAccessError(["admin"]);
+  if (access.response) return access.response;
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const ids = Array.isArray(body.ids)
@@ -173,6 +180,8 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const access = await apiAccessError(["admin"]);
+  if (access.response) return access.response;
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const ids = Array.isArray(body.ids)

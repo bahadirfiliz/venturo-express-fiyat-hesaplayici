@@ -36,11 +36,58 @@ const createJobsTableSql = `
   )
 `;
 
+const createCustomerAccountsTableSql = `
+  CREATE TABLE IF NOT EXISTS customer_accounts (
+    id TEXT PRIMARY KEY NOT NULL,
+    code TEXT UNIQUE NOT NULL,
+    short_name TEXT NOT NULL,
+    legal_title TEXT NOT NULL,
+    job_firm TEXT UNIQUE NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )
+`;
+
+const createAppUsersTableSql = `
+  CREATE TABLE IF NOT EXISTS app_users (
+    id TEXT PRIMARY KEY NOT NULL,
+    customer_id TEXT REFERENCES customer_accounts(id) ON DELETE RESTRICT,
+    username TEXT UNIQUE NOT NULL,
+    display_name TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('admin', 'customer')),
+    password_hash TEXT NOT NULL,
+    password_salt TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1,
+    must_change_password INTEGER NOT NULL DEFAULT 1,
+    failed_login_attempts INTEGER NOT NULL DEFAULT 0,
+    locked_until TEXT,
+    last_login_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    CONSTRAINT customer_role_scope CHECK (
+      (role = 'customer' AND customer_id IS NOT NULL) OR
+      (role = 'admin' AND customer_id IS NULL)
+    )
+  )
+`;
+
+const createAuthSessionsTableSql = `
+  CREATE TABLE IF NOT EXISTS auth_sessions (
+    token_hash TEXT PRIMARY KEY NOT NULL,
+    user_id TEXT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL
+  )
+`;
+
 const globalForDatabase = globalThis as typeof globalThis & {
   venturoSql?: SqlClient;
 };
 
 let schemaPromise: Promise<void> | null = null;
+let authSchemaPromise: Promise<void> | null = null;
 
 export function getSql() {
   const connectionString = process.env.DATABASE_URL;
@@ -79,4 +126,32 @@ export function ensureJobsSchema(database = getSql()) {
     });
 
   return schemaPromise;
+}
+
+export function ensureAuthSchema(database = getSql()) {
+  authSchemaPromise ??= (async () => {
+    await database.unsafe(createCustomerAccountsTableSql);
+    await database.unsafe(createAppUsersTableSql);
+    await database.unsafe(createAuthSessionsTableSql);
+    await Promise.all([
+      database.unsafe(
+        "CREATE INDEX IF NOT EXISTS app_users_customer_idx ON app_users (customer_id)",
+      ),
+      database.unsafe(
+        "CREATE INDEX IF NOT EXISTS auth_sessions_user_idx ON auth_sessions (user_id)",
+      ),
+      database.unsafe(
+        "CREATE INDEX IF NOT EXISTS auth_sessions_expiry_idx ON auth_sessions (expires_at)",
+      ),
+    ]);
+  })().catch((error) => {
+    authSchemaPromise = null;
+    throw error;
+  });
+
+  return authSchemaPromise;
+}
+
+export async function ensureApplicationSchema(database = getSql()) {
+  await Promise.all([ensureJobsSchema(database), ensureAuthSchema(database)]);
 }

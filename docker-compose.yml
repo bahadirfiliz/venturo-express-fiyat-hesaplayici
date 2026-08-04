@@ -21,6 +21,8 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://venturo:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/venturoproforma
+      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-}
+      INITIAL_TERA_PASSWORD: ${INITIAL_TERA_PASSWORD:-}
       NODE_ENV: production
       PORT: 3010
       HOSTNAME: 0.0.0.0

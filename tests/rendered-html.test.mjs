@@ -7,9 +7,11 @@ import { readSheet } from "read-excel-file/node";
 const projectRoot = new URL("../", import.meta.url);
 test("builds the Venturo Express calculator as a standalone app", async () => {
   await access(new URL(".next/standalone/server.js", projectRoot));
-  const [pageSource, layoutSource] = await Promise.all([
-    readFile(new URL("app/page.tsx", projectRoot), "utf8"),
+  const [pageSource, layoutSource, loginSource, portalSource] = await Promise.all([
+    readFile(new URL("app/admin-dashboard.tsx", projectRoot), "utf8"),
     readFile(new URL("app/layout.tsx", projectRoot), "utf8"),
+    readFile(new URL("app/giris/login-form.tsx", projectRoot), "utf8"),
+    readFile(new URL("app/musteri/customer-portal.tsx", projectRoot), "utf8"),
   ]);
 
   assert.match(
@@ -20,6 +22,10 @@ test("builds the Venturo Express calculator as a standalone app", async () => {
   assert.match(pageSource, /39 ilçe · 17 fiyat bölgesi/);
   assert.match(pageSource, /Hesaplanan fiyat/);
   assert.match(layoutSource, /og\.png/);
+  assert.match(loginSource, /Hesabınıza giriş yapın/);
+  assert.match(portalSource, /Salt okunur belge/);
+  assert.match(portalSource, /Fiyat Hesapla/);
+  assert.doesNotMatch(portalSource, /Venturo net kârı|Taşerona verirsek/);
   assert.doesNotMatch(pageSource, /codex-preview|Your site is taking shape/);
 });
 

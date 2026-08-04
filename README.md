@@ -11,9 +11,11 @@ kaydı, firma/ay arşivi ve proforma hazırlama portalı.
 - Paket/desi katsayıları ve 20 km üzeri iki kat ek kilometre bedeli
 - Köprü maliyeti ile Venturo ve taşeron net kâr analizi
 - Excel ile firma/ay bazında toplu fiyatlandırma
-- D1 üzerinde kalıcı tekli iş kayıtları
+- PostgreSQL üzerinde kalıcı tekli iş kayıtları
 - Firma ve hizmet ayına göre iş/proforma listesi
 - Venturo logolu, KDV dökümlü yazdırılabilir proforma
+- Rol bazlı yönetici ve müşteri girişi
+- Müşteriye özel iş arşivi, fiyat hesaplama ve salt okunur proforma
 
 ## Gereksinimler
 
@@ -32,6 +34,10 @@ Portal sabit olarak [http://localhost:3010](http://localhost:3010) adresinde
 
 Tekli iş ve proforma kayıtları için `DATABASE_URL` değişkeniyle bir PostgreSQL
 bağlantısı verilmelidir.
+
+İlk kurulumda `INITIAL_ADMIN_PASSWORD` ve `INITIAL_TERA_PASSWORD` ortam
+değişkenleri verilirse `venturo.admin` ve `nazife.vural` kullanıcıları bir kez
+oluşturulur. Şifreler açık metin saklanmaz ve ilk girişte değiştirilir.
 
 ## Coolify
 
