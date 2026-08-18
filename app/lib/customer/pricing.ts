@@ -14,6 +14,12 @@ export type CustomerQuoteInput = {
 };
 
 export function getCustomerPricingOptions() {
+  const publicSourceNames = new Set([
+    "KGM - 15 Temmuz / FSM",
+    "İBB Şehir Planlama",
+    "OSRM Table Service / OpenStreetMap",
+  ]);
+
   return {
     districts: pricingData.districts.map((district) => ({
       name: district.name,
@@ -24,6 +30,67 @@ export function getCustomerPricingOptions() {
     packages: pricingData.packages.map((item) => item.name),
     vatRate: 0.2,
     priceDate: pricingData.meta.updatedAt,
+    reference: {
+      meta: {
+        districtCount: pricingData.meta.districtCount,
+        zoneCount: pricingData.meta.zoneCount,
+        currency: pricingData.meta.currency,
+        oneWay: pricingData.meta.oneWay,
+        includedZoneKm: pricingData.meta.includedZoneKm,
+        extraKmRate: { ...pricingData.meta.extraKmRate },
+        longDistanceThresholdKm: pricingData.meta.longDistanceThresholdKm,
+        longDistanceExtraKmFactor:
+          pricingData.meta.longDistanceExtraKmFactor,
+        roundingStep: pricingData.meta.roundingStep,
+        specialZoneCode: pricingData.meta.specialZoneCode,
+        standardCrossing: pricingData.meta.standardCrossing,
+      },
+      zoneCodes: [...pricingData.zoneCodes],
+      zones: pricingData.zones.map((zone) => ({
+        code: zone.code,
+        name: zone.name,
+        side: zone.side,
+        hub: zone.hub,
+        districts: [...zone.districts],
+        internalKm: zone.internalKm,
+        internalMin: zone.internalMin,
+        note: zone.note,
+        color: zone.color,
+      })),
+      motorPriceMatrix: pricingData.motorPriceMatrix.map((row) => [...row]),
+      carPriceMatrix: pricingData.carPriceMatrix.map((row) => [...row]),
+      priorityRules: pricingData.priorities.map((item) => ({
+        name: item.name,
+        factor: item.factor,
+        description: item.description,
+      })),
+      packageRules: pricingData.packages.map((item) => ({
+        name: item.name,
+        factor: item.factor,
+        defaultDesi: item.defaultDesi,
+        description: item.description,
+      })),
+      desiRules: pricingData.desiRules.map((item) => ({
+        vehicle: item.vehicle,
+        minDesi: item.minDesi,
+        factor: item.factor,
+        note: item.note,
+      })),
+      sources: pricingData.sources
+        .filter((source) => publicSourceNames.has(source.name))
+        .map((source) => ({
+          name: source.name,
+          date: source.date,
+          data: source.data,
+          url: source.url,
+          note: source.note,
+        })),
+      notices: [
+        "Bölge matrisleri temsilî ilçe merkezleri ve tipik yol mesafeleriyle oluşturulur; kesin mahalle rotası fiyatı değiştirebilir.",
+        "Gerçek zamanlı trafik, bekleme, otopark ve standart dışı geçişler ön fiyatın dışında ayrıca değerlendirilebilir.",
+        "Adalar karayolu tarifesine dahil değildir ve özel teklif gerektirir.",
+      ],
+    },
   };
 }
 

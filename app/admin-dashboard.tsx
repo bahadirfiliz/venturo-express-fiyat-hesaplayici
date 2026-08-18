@@ -3,10 +3,18 @@
 import { useMemo, useState } from "react";
 import type { ChangeEvent } from "react";
 import { readSheet } from "read-excel-file/browser";
+import ExternalTransportLedger from "./external-transport-ledger";
 import JobLedger from "./job-ledger";
 import { pricingData } from "./pricing-data";
 
-type TabId = "calculate" | "jobs" | "bulk" | "regions" | "prices" | "model";
+type TabId =
+  | "calculate"
+  | "jobs"
+  | "external"
+  | "bulk"
+  | "regions"
+  | "prices"
+  | "model";
 type Vehicle = "Motor Kurye" | "Arabalı Kurye";
 type BulkStatus = "priced" | "special" | "invalid";
 
@@ -43,6 +51,7 @@ type BulkJob = {
 const tabs: Array<{ id: TabId; label: string; eyebrow: string }> = [
   { id: "calculate", label: "Fiyat Hesapla", eyebrow: "Anlık teklif" },
   { id: "jobs", label: "İşler / Proforma", eyebrow: "Tekli kayıt" },
+  { id: "external", label: "Harici Taşıma", eyebrow: "Gelir / gider" },
   { id: "bulk", label: "Toplu Fiyat / Firma", eyebrow: "Excel yükle" },
   { id: "regions", label: "Bölge Haritası", eyebrow: "39 ilçe" },
   { id: "prices", label: "Fiyat Matrisleri", eyebrow: "Motor & araba" },
@@ -1324,6 +1333,8 @@ export default function AdminDashboard({
       )}
 
       {activeTab === "jobs" && <JobLedger />}
+
+      {activeTab === "external" && <ExternalTransportLedger />}
 
       {activeTab === "bulk" && (
         <section

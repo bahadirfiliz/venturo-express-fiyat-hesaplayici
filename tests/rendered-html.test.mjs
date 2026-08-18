@@ -7,11 +7,12 @@ import { readSheet } from "read-excel-file/node";
 const projectRoot = new URL("../", import.meta.url);
 test("builds the Venturo Express calculator as a standalone app", async () => {
   await access(new URL(".next/standalone/server.js", projectRoot));
-  const [pageSource, layoutSource, loginSource, portalSource] = await Promise.all([
+  const [pageSource, layoutSource, loginSource, portalSource, customerPricingSource] = await Promise.all([
     readFile(new URL("app/admin-dashboard.tsx", projectRoot), "utf8"),
     readFile(new URL("app/layout.tsx", projectRoot), "utf8"),
     readFile(new URL("app/giris/login-form.tsx", projectRoot), "utf8"),
     readFile(new URL("app/musteri/customer-portal.tsx", projectRoot), "utf8"),
+    readFile(new URL("app/lib/customer/pricing.ts", projectRoot), "utf8"),
   ]);
 
   assert.match(
@@ -25,7 +26,17 @@ test("builds the Venturo Express calculator as a standalone app", async () => {
   assert.match(loginSource, /Hesabınıza giriş yapın/);
   assert.match(portalSource, /Salt okunur belge/);
   assert.match(portalSource, /Fiyat Hesapla/);
-  assert.doesNotMatch(portalSource, /Venturo net kârı|Taşerona verirsek/);
+  assert.match(portalSource, /Bölge Haritası/);
+  assert.match(portalSource, /Fiyat Matrisleri/);
+  assert.match(portalSource, /Model Detayı/);
+  assert.doesNotMatch(
+    portalSource,
+    /Venturo net kârı|Taşerona verirsek|Maliyet parametreleri|pricing-data/,
+  );
+  assert.doesNotMatch(
+    customerPricingSource,
+    /pricingData\.parameters|marketPositioningPremium|Venturo net kârı|Taşerona verirsek/,
+  );
   assert.doesNotMatch(pageSource, /codex-preview|Your site is taking shape/);
 });
 
@@ -92,6 +103,35 @@ test("keeps the Excel-derived data complete and internally consistent", async ()
     data.priorities.find((item) => item.name === "VIP").factor,
     2,
   );
+});
+
+test("ships the daily external transport income and expense ledger", async () => {
+  const [dashboardSource, ledgerSource, apiSource, databaseSource, migrationSource] =
+    await Promise.all([
+      readFile(new URL("app/admin-dashboard.tsx", projectRoot), "utf8"),
+      readFile(new URL("app/external-transport-ledger.tsx", projectRoot), "utf8"),
+      readFile(new URL("app/api/external-transport/route.ts", projectRoot), "utf8"),
+      readFile(new URL("db/index.ts", projectRoot), "utf8"),
+      readFile(new URL("drizzle/0002_whole_tombstone.sql", projectRoot), "utf8"),
+    ]);
+
+  assert.match(dashboardSource, /Harici Taşıma/);
+  assert.match(ledgerSource, /Günlük kazanç \/ gelir \(TL\)/);
+  assert.match(ledgerSource, /\+ Gider kalemi/);
+  assert.match(ledgerSource, /Toplam gelir/);
+  assert.match(ledgerSource, /Toplam gider/);
+  assert.match(ledgerSource, /Net bakiye/);
+  assert.match(ledgerSource, /Günlük kaydı güncelle/);
+  assert.match(ledgerSource, /Düzenlemeyi iptal et/);
+  assert.match(apiSource, /apiAccessError\(\["admin"\]\)/);
+  assert.match(apiSource, /ON CONFLICT \(entry_date\) DO UPDATE/);
+  assert.match(apiSource, /export async function PATCH/);
+  assert.match(databaseSource, /external_transport_expenses/);
+  assert.match(migrationSource, /ON DELETE cascade/);
+
+  const income = 1000;
+  const expenses = [300, 50];
+  assert.equal(income - expenses.reduce((sum, amount) => sum + amount, 0), 650);
 });
 
 test("preserves the verified price scenarios", async () => {
