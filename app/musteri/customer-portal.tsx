@@ -4,7 +4,19 @@ import { useEffect, useMemo, useState } from "react";
 import type { CustomerJob } from "../lib/customer/jobs";
 import type { CustomerVehicle } from "../lib/customer/pricing";
 
-type PortalTab = "quote" | "jobs" | "proforma";
+type PortalTab = "quote" | "jobs" | "proforma" | "regions" | "prices" | "model";
+type PricingMatrixCell = number | string;
+type CustomerZone = {
+  code: string;
+  name: string;
+  side: string;
+  hub: string;
+  districts: string[];
+  internalKm: number | null;
+  internalMin: number | null;
+  note: string;
+  color: string;
+};
 type PricingOptions = {
   districts: Array<{ name: string; zoneCode: string }>;
   vehicles: CustomerVehicle[];
@@ -12,6 +24,46 @@ type PricingOptions = {
   packages: string[];
   vatRate: number;
   priceDate: string;
+  reference: {
+    meta: {
+      districtCount: number;
+      zoneCount: number;
+      currency: string;
+      oneWay: boolean;
+      includedZoneKm: number;
+      extraKmRate: { motor: number; car: number };
+      longDistanceThresholdKm: number;
+      longDistanceExtraKmFactor: number;
+      roundingStep: number;
+      specialZoneCode: string;
+      standardCrossing: string;
+    };
+    zoneCodes: string[];
+    zones: CustomerZone[];
+    motorPriceMatrix: PricingMatrixCell[][];
+    carPriceMatrix: PricingMatrixCell[][];
+    priorityRules: Array<{ name: string; factor: number; description: string }>;
+    packageRules: Array<{
+      name: string;
+      factor: number;
+      defaultDesi: number;
+      description: string;
+    }>;
+    desiRules: Array<{
+      vehicle: string;
+      minDesi: number;
+      factor: number;
+      note: string;
+    }>;
+    sources: Array<{
+      name: string;
+      date: string;
+      data: string;
+      url: string;
+      note: string;
+    }>;
+    notices: string[];
+  };
 };
 type Quote =
   | {
@@ -73,6 +125,14 @@ function todayInIstanbul() {
   }).format(new Date());
 }
 
+function priceHeat(value: PricingMatrixCell) {
+  if (typeof value !== "number") return "special";
+  if (value < 700) return "low";
+  if (value < 1200) return "mid";
+  if (value < 2000) return "high";
+  return "peak";
+}
+
 export default function CustomerPortal({
   user,
   customer,
@@ -94,6 +154,9 @@ export default function CustomerPortal({
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteError, setQuoteError] = useState("");
   const [quoteLoading, setQuoteLoading] = useState(true);
+  const [regionSide, setRegionSide] = useState("Tümü");
+  const [matrixVehicle, setMatrixVehicle] =
+    useState<CustomerVehicle>("Motor Kurye");
   const monthOptions = useMemo(
     () => [...new Set(jobs.map((job) => job.monthKey))].sort().reverse(),
     [jobs],
@@ -153,6 +216,19 @@ export default function CustomerPortal({
 
   const departureOption = options.districts.find((item) => item.name === departure)!;
   const arrivalOption = options.districts.find((item) => item.name === arrival)!;
+  const departureZone = options.reference.zones.find(
+    (item) => item.code === departureOption.zoneCode,
+  )!;
+  const arrivalZone = options.reference.zones.find(
+    (item) => item.code === arrivalOption.zoneCode,
+  )!;
+  const filteredZones = options.reference.zones.filter(
+    (zone) => regionSide === "Tümü" || zone.side === regionSide,
+  );
+  const visibleMatrix =
+    matrixVehicle === "Motor Kurye"
+      ? options.reference.motorPriceMatrix
+      : options.reference.carPriceMatrix;
 
   return (
     <main className="customer-portal">
@@ -191,6 +267,9 @@ export default function CustomerPortal({
           ["quote", "Fiyat Hesapla", "Anlık teklif"],
           ["jobs", "İşlerim", `${jobs.length} kayıt`],
           ["proforma", "Proforma", "Salt okunur"],
+          ["regions", "Bölge Haritası", `${options.reference.meta.districtCount} ilçe`],
+          ["prices", "Fiyat Matrisleri", "Motor & araba"],
+          ["model", "Model Detayı", "Kural & kaynak"],
         ] as Array<[PortalTab, string, string]>).map(([id, label, eyebrow]) => (
           <button
             key={id}
@@ -387,6 +466,262 @@ export default function CustomerPortal({
               <div className="proforma-total-row"><div><b>KDV HARİÇ TOPLAM</b><span>{formatCurrency(netTotal)}</span></div><div><b>KDV %20</b><span>{formatCurrency(vatTotal)}</span></div><div className="grand-total"><b>GENEL TOPLAM</b><strong>{formatCurrency(grossTotal)}</strong></div></div>
               <p className="proforma-note">Fiyatlar tek yön ve KDV hariçtir; %20 KDV ayrıca uygulanmıştır. Bu belge proformadır, mali belge değildir.</p>
             </section>
+          </article>
+        </section>
+      )}
+
+      {activeTab === "regions" && (
+        <section className="content-section customer-reference-section">
+          <div className="content-heading">
+            <div>
+              <span className="section-index">04</span>
+              <p>Kurye operasyon haritası</p>
+              <h2>Yakın ilçeler, ortak fiyat bölgeleri</h2>
+            </div>
+            <div className="segmented-control" aria-label="Yaka filtresi">
+              {["Tümü", "Avrupa", "Anadolu", "Ada"].map((side) => (
+                <button
+                  type="button"
+                  key={side}
+                  className={regionSide === side ? "active" : ""}
+                  onClick={() => setRegionSide(side)}
+                >
+                  {side}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="map-layout">
+            <figure className="map-card">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/istanbul-bolge-haritasi.png"
+                alt="İstanbul ilçelerinin 17 kurye fiyat bölgesine ayrıldığı renkli harita"
+              />
+              <figcaption>
+                Aynı renkteki ilçeler aynı fiyat bölgesindedir. Adalar deniz
+                aktarımı nedeniyle B17 özel bölgesidir.
+              </figcaption>
+            </figure>
+            <div className="region-summary">
+              <span>Seçili rota</span>
+              <div>
+                <b style={{ background: departureZone.color }}>{departureZone.code}</b>
+                <p><strong>{departure}</strong><small>{departureZone.name}</small></p>
+                <i>→</i>
+                <b style={{ background: arrivalZone.color }}>{arrivalZone.code}</b>
+                <p><strong>{arrival}</strong><small>{arrivalZone.name}</small></p>
+              </div>
+              <button type="button" onClick={() => setActiveTab("quote")}>
+                Rotayı düzenle
+              </button>
+            </div>
+          </div>
+
+          <div className="zone-grid">
+            {filteredZones.map((zone) => (
+              <article className="zone-card" key={zone.code}>
+                <div className="zone-card-top">
+                  <span style={{ background: zone.color }}>{zone.code}</span>
+                  <small>{zone.side}</small>
+                </div>
+                <h3>{zone.name}</h3>
+                <p>{zone.districts.join(", ")}</p>
+                <dl>
+                  <div><dt>Merkez</dt><dd>{zone.hub}</dd></div>
+                  <div>
+                    <dt>İç rota</dt>
+                    <dd>{zone.internalKm === null ? "Özel" : `${zone.internalKm} km · ${zone.internalMin} dk`}</dd>
+                  </div>
+                </dl>
+                <small className="zone-note">{zone.note}</small>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {activeTab === "prices" && (
+        <section className="content-section customer-reference-section">
+          <div className="content-heading matrix-heading">
+            <div>
+              <span className="section-index">05</span>
+              <p>{options.reference.meta.zoneCount} × {options.reference.meta.zoneCount} bölge tarifesi</p>
+              <h2>Motor ve arabalı kurye fiyat matrisleri</h2>
+            </div>
+            <div className="segmented-control" aria-label="Fiyat matrisi araç tipi">
+              {options.vehicles.map((item) => (
+                <button
+                  type="button"
+                  key={item}
+                  className={matrixVehicle === item ? "active" : ""}
+                  onClick={() => setMatrixVehicle(item)}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="matrix-route-note">
+            <span style={{ background: departureZone.color }}>{departureZone.code}</span>
+            <b>{departure}</b><i>satırından</i>
+            <span style={{ background: arrivalZone.color }}>{arrivalZone.code}</span>
+            <b>{arrival}</b><i>sütununa bakılır.</i>
+          </div>
+
+          <div className="table-shell matrix-shell">
+            <table className="price-matrix">
+              <thead>
+                <tr>
+                  <th>Çıkış ↓ / Varış →</th>
+                  {options.reference.zoneCodes.map((code) => (
+                    <th key={code} className={arrivalZone.code === code ? "selected-axis" : ""}>{code}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {visibleMatrix.map((row, rowIndex) => (
+                  <tr key={options.reference.zoneCodes[rowIndex]}>
+                    <th className={departureZone.code === options.reference.zoneCodes[rowIndex] ? "selected-axis" : ""}>
+                      {options.reference.zoneCodes[rowIndex]}
+                    </th>
+                    {row.map((cell, columnIndex) => {
+                      const selected =
+                        departureZone.code === options.reference.zoneCodes[rowIndex] &&
+                        arrivalZone.code === options.reference.zoneCodes[columnIndex];
+                      return (
+                        <td
+                          key={options.reference.zoneCodes[columnIndex]}
+                          className={`${priceHeat(cell)} ${selected ? "selected-cell" : ""}`}
+                        >
+                          {typeof cell === "number" ? formatNumber(cell, 0) : "Özel"}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="matrix-legend">
+            <span><i className="low" /> Alt bant</span>
+            <span><i className="mid" /> Orta bant</span>
+            <span><i className="high" /> Üst bant</span>
+            <span><i className="peak" /> Uzak rota</span>
+            <span>Fiyatlar TL, KDV hariç ve tek yöndür.</span>
+          </div>
+        </section>
+      )}
+
+      {activeTab === "model" && (
+        <section className="content-section customer-reference-section model-section">
+          <div className="content-heading">
+            <div>
+              <span className="section-index">06</span>
+              <p>Şeffaf satış tarifesi</p>
+              <h2>Fiyatlandırma kuralları ve model detayları</h2>
+            </div>
+            <span className="model-badge">Salt okunur · {options.priceDate}</span>
+          </div>
+
+          <div className="rule-grid">
+            <article className="rule-card priority-card">
+              <div className="rule-title"><span>Öncelik</span><small>Motor ve arabada aynı katsayı</small></div>
+              {options.reference.priorityRules.map((item) => (
+                <div className="rule-row" key={item.name}>
+                  <span><b>{item.name}</b><small>{item.description}</small></span>
+                  <strong>{formatNumber(item.factor)}×</strong>
+                </div>
+              ))}
+              <div className="rule-row distance-trigger">
+                <span>
+                  <b>{options.reference.meta.longDistanceThresholdKm} km üzeri ek km</b>
+                  <small>Yalnızca eşiği aşan kilometre bölümüne uygulanır</small>
+                </span>
+                <strong>{formatNumber(options.reference.meta.longDistanceExtraKmFactor)}× km</strong>
+              </div>
+            </article>
+
+            <article className="rule-card package-card">
+              <div className="rule-title"><span>Gönderi profili</span><small>Paket veya desinin yüksek olanı</small></div>
+              {options.reference.packageRules.map((item) => (
+                <div className="rule-row" key={item.name}>
+                  <span><b>{item.name}</b><small>{formatNumber(item.defaultDesi)} desi · {item.description}</small></span>
+                  <strong>{formatNumber(item.factor)}×</strong>
+                </div>
+              ))}
+            </article>
+          </div>
+
+          <div className="customer-model-summary">
+            <article>
+              <span>Standart mesafe</span>
+              <strong>{options.reference.meta.includedZoneKm} km dahil</strong>
+              <small>Motor +{options.reference.meta.extraKmRate.motor} TL/km · Araba +{options.reference.meta.extraKmRate.car} TL/km</small>
+            </article>
+            <article>
+              <span>Uzun mesafe</span>
+              <strong>{options.reference.meta.longDistanceThresholdKm} km sonrası</strong>
+              <small>Yalnızca aşan ek kilometre bedeli {options.reference.meta.longDistanceExtraKmFactor}× uygulanır.</small>
+            </article>
+            <article>
+              <span>Yuvarlama</span>
+              <strong>Üst {options.reference.meta.roundingStep} TL</strong>
+              <small>Tarife sonucu bir sonraki {options.reference.meta.roundingStep} TL adımına yuvarlanır.</small>
+            </article>
+            <article>
+              <span>Standart geçiş</span>
+              <strong>{options.reference.meta.standardCrossing}</strong>
+              <small>Adalar ({options.reference.meta.specialZoneCode}) özel teklif kapsamındadır.</small>
+            </article>
+          </div>
+
+          <article className="customer-model-formula">
+            <span>Fiyat formülü</span>
+            <p>
+              (Baz bölge tarifesi + 10–20 km normal ek mesafe bedeli + yalnızca
+              20 km üzerindeki bölüm için 2× ek kilometre bedeli) × öncelik ×
+              yüksek olan paket/desi katsayısı
+            </p>
+          </article>
+
+          <article className="panel data-panel">
+            <div className="table-title"><div><span>Desi kuralları</span><small>Araç tipine göre hacim katsayısı</small></div></div>
+            <div className="table-shell compact-table">
+              <table>
+                <thead><tr><th>Araç</th><th>Asgari desi</th><th>Katsayı</th><th>Not</th></tr></thead>
+                <tbody>
+                  {options.reference.desiRules.map((item) => (
+                    <tr key={`${item.vehicle}-${item.minDesi}`}>
+                      <td>{item.vehicle}</td><td>{formatNumber(item.minDesi)}</td><td><b>{formatNumber(item.factor)}×</b></td><td>{item.note}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article className="sources-panel customer-sources-panel">
+            <div className="sources-intro">
+              <span>Kaynak ve kapsam</span>
+              <p>Bölge, rota ve standart geçiş varsayımlarında kullanılan kamuya açık kaynaklar ile müşteri fiyat ekranının sınırları.</p>
+            </div>
+            <div className="source-list">
+              {options.reference.sources.map((source, index) => (
+                <div className="source-item" key={source.name}>
+                  <span>{String(index + 1).padStart(2, "0")}</span>
+                  <div><b>{source.name}</b><small>{source.date}</small><p>{source.data}</p></div>
+                  <a href={source.url} target="_blank" rel="noreferrer">Kaynak ↗</a>
+                </div>
+              ))}
+            </div>
+            <div className="limitations customer-limitations">
+              {options.reference.notices.map((item, index) => (
+                <p key={item}><span>{index + 1}</span>{item}</p>
+              ))}
+            </div>
           </article>
         </section>
       )}

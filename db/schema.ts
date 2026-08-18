@@ -46,6 +46,36 @@ export const courierJobs = pgTable(
   ],
 );
 
+export const externalTransportDays = pgTable(
+  "external_transport_days",
+  {
+    id: text("id").primaryKey(),
+    entryDate: text("entry_date").notNull().unique(),
+    monthKey: text("month_key").notNull(),
+    incomeAmount: doublePrecision("income_amount").notNull().default(0),
+    incomeNote: text("income_note").notNull().default(""),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [index("external_transport_days_month_idx").on(table.monthKey)],
+);
+
+export const externalTransportExpenses = pgTable(
+  "external_transport_expenses",
+  {
+    id: text("id").primaryKey(),
+    dayId: text("day_id")
+      .notNull()
+      .references(() => externalTransportDays.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    amount: doublePrecision("amount").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [index("external_transport_expenses_day_idx").on(table.dayId)],
+);
+
 export const customerAccounts = pgTable(
   "customer_accounts",
   {

@@ -36,6 +36,30 @@ const createJobsTableSql = `
   )
 `;
 
+const createExternalTransportDaysTableSql = `
+  CREATE TABLE IF NOT EXISTS external_transport_days (
+    id TEXT PRIMARY KEY NOT NULL,
+    entry_date TEXT UNIQUE NOT NULL,
+    month_key TEXT NOT NULL,
+    income_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+    income_note TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )
+`;
+
+const createExternalTransportExpensesTableSql = `
+  CREATE TABLE IF NOT EXISTS external_transport_expenses (
+    id TEXT PRIMARY KEY NOT NULL,
+    day_id TEXT NOT NULL REFERENCES external_transport_days(id) ON DELETE CASCADE,
+    label TEXT NOT NULL,
+    amount DOUBLE PRECISION NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )
+`;
+
 const createCustomerAccountsTableSql = `
   CREATE TABLE IF NOT EXISTS customer_accounts (
     id TEXT PRIMARY KEY NOT NULL,
@@ -88,6 +112,7 @@ const globalForDatabase = globalThis as typeof globalThis & {
 
 let schemaPromise: Promise<void> | null = null;
 let authSchemaPromise: Promise<void> | null = null;
+let externalTransportSchemaPromise: Promise<void> | null = null;
 
 export function getSql() {
   const connectionString = process.env.DATABASE_URL;
@@ -152,6 +177,30 @@ export function ensureAuthSchema(database = getSql()) {
   return authSchemaPromise;
 }
 
+export function ensureExternalTransportSchema(database = getSql()) {
+  externalTransportSchemaPromise ??= (async () => {
+    await database.unsafe(createExternalTransportDaysTableSql);
+    await database.unsafe(createExternalTransportExpensesTableSql);
+    await Promise.all([
+      database.unsafe(
+        "CREATE INDEX IF NOT EXISTS external_transport_days_month_idx ON external_transport_days (month_key)",
+      ),
+      database.unsafe(
+        "CREATE INDEX IF NOT EXISTS external_transport_expenses_day_idx ON external_transport_expenses (day_id)",
+      ),
+    ]);
+  })().catch((error) => {
+    externalTransportSchemaPromise = null;
+    throw error;
+  });
+
+  return externalTransportSchemaPromise;
+}
+
 export async function ensureApplicationSchema(database = getSql()) {
-  await Promise.all([ensureJobsSchema(database), ensureAuthSchema(database)]);
+  await Promise.all([
+    ensureJobsSchema(database),
+    ensureAuthSchema(database),
+    ensureExternalTransportSchema(database),
+  ]);
 }
