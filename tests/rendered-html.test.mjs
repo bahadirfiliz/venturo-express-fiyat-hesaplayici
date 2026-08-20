@@ -123,6 +123,16 @@ test("ships the daily external transport income and expense ledger", async () =>
   assert.match(ledgerSource, /Net bakiye/);
   assert.match(ledgerSource, /Günlük kaydı güncelle/);
   assert.match(ledgerSource, /Düzenlemeyi iptal et/);
+  assert.match(ledgerSource, /\{ label: "Üyelik", amount: "1000,00" \}/);
+  assert.match(ledgerSource, /\{ label: "Araç Kirası", amount: "1233,00" \}/);
+  assert.match(
+    ledgerSource,
+    /\{ label: "Şoför Parası", amount: "1000,00" \}/,
+  );
+  assert.match(
+    ledgerSource,
+    /\{ label: "Yakıt", amount: "", optional: true \}/,
+  );
   assert.match(apiSource, /apiAccessError\(\["admin"\]\)/);
   assert.match(apiSource, /ON CONFLICT \(entry_date\) DO UPDATE/);
   assert.match(apiSource, /export async function PATCH/);

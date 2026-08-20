@@ -24,12 +24,20 @@ type ExpenseDraft = {
   key: string;
   label: string;
   amount: string;
+  optional?: boolean;
 };
 
 type DaysResponse = {
   days: StoredDay[];
   months: string[];
 };
+
+const FIXED_DAILY_EXPENSES = [
+  { label: "Üyelik", amount: "1000,00" },
+  { label: "Araç Kirası", amount: "1233,00" },
+  { label: "Şoför Parası", amount: "1000,00" },
+  { label: "Yakıt", amount: "", optional: true },
+] as const;
 
 function todayInIstanbul() {
   return new Intl.DateTimeFormat("sv-SE", {
@@ -40,8 +48,22 @@ function todayInIstanbul() {
   }).format(new Date());
 }
 
-function newExpense(label = "", amount = ""): ExpenseDraft {
-  return { key: crypto.randomUUID(), label, amount };
+function newExpense(
+  label = "",
+  amount = "",
+  optional = false,
+): ExpenseDraft {
+  return { key: crypto.randomUUID(), label, amount, optional };
+}
+
+function defaultExpenses() {
+  return FIXED_DAILY_EXPENSES.map((expense) =>
+    newExpense(
+      expense.label,
+      expense.amount,
+      "optional" in expense && expense.optional,
+    ),
+  );
 }
 
 function formatCurrency(value: number) {
@@ -85,7 +107,7 @@ export default function ExternalTransportLedger() {
   const [entryDate, setEntryDate] = useState(today);
   const [incomeAmount, setIncomeAmount] = useState("");
   const [incomeNote, setIncomeNote] = useState("");
-  const [expenses, setExpenses] = useState<ExpenseDraft[]>([newExpense()]);
+  const [expenses, setExpenses] = useState<ExpenseDraft[]>(defaultExpenses);
   const [days, setDays] = useState<StoredDay[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(today.slice(0, 7));
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
@@ -167,7 +189,7 @@ export default function ExternalTransportLedger() {
     setEntryDate(date);
     setIncomeAmount("");
     setIncomeNote("");
-    setExpenses([newExpense()]);
+    setExpenses(defaultExpenses());
     setMessage("");
     setError("");
   }
@@ -213,8 +235,14 @@ export default function ExternalTransportLedger() {
       .map((expense) => ({
         label: expense.label.trim(),
         amount: parseMoney(expense.amount),
+        amountEntered: expense.amount.trim() !== "",
+        optional: expense.optional === true,
       }))
-      .filter((expense) => expense.label || (expense.amount ?? 0) > 0);
+      .filter(
+        (expense) =>
+          !(expense.optional && !expense.amountEntered) &&
+          (expense.label || (expense.amount ?? 0) > 0),
+      );
     if (
       parsedExpenses.some(
         (expense) => !expense.label || expense.amount === null || expense.amount <= 0,
@@ -346,7 +374,12 @@ export default function ExternalTransportLedger() {
           </div>
 
           <div className="external-expense-heading">
-            <div><span>Günlük giderler</span><small>Birden fazla kalem ekleyebilirsiniz.</small></div>
+            <div>
+              <span>Günlük giderler</span>
+              <small>
+                Üyelik, araç kirası ve şoför parası sabit; yakıt girişe hazırdır.
+              </small>
+            </div>
             <button
               type="button"
               onClick={() => setExpenses((current) => [...current, newExpense()])}
