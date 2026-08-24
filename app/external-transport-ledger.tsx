@@ -27,9 +27,36 @@ type ExpenseDraft = {
   optional?: boolean;
 };
 
+type CashSummary = {
+  dayCount: number;
+  income: number;
+  paidExpenses: number;
+  paidMembership: number;
+  paidFuel: number;
+  paidOther: number;
+  driverReserve: number;
+  vehicleReserve: number;
+  netResult: number;
+  cashOnHand: number;
+};
+
 type DaysResponse = {
   days: StoredDay[];
   months: string[];
+  cashSummary: CashSummary;
+};
+
+const EMPTY_CASH_SUMMARY: CashSummary = {
+  dayCount: 0,
+  income: 0,
+  paidExpenses: 0,
+  paidMembership: 0,
+  paidFuel: 0,
+  paidOther: 0,
+  driverReserve: 0,
+  vehicleReserve: 0,
+  netResult: 0,
+  cashOnHand: 0,
 };
 
 const FIXED_DAILY_EXPENSES = [
@@ -109,6 +136,9 @@ export default function ExternalTransportLedger() {
   const [incomeNote, setIncomeNote] = useState("");
   const [expenses, setExpenses] = useState<ExpenseDraft[]>(defaultExpenses);
   const [days, setDays] = useState<StoredDay[]>([]);
+  const [cashSummary, setCashSummary] = useState<CashSummary>(
+    EMPTY_CASH_SUMMARY,
+  );
   const [selectedMonth, setSelectedMonth] = useState(today.slice(0, 7));
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -125,16 +155,22 @@ export default function ExternalTransportLedger() {
     const data = (await response.json()) as {
       days?: StoredDay[];
       months?: string[];
+      cashSummary?: CashSummary;
       error?: string;
     };
     if (!response.ok) {
       throw new Error(data.error || "Harici taşıma kayıtları alınamadı.");
     }
-    return { days: data.days ?? [], months: data.months ?? [] };
+    return {
+      days: data.days ?? [],
+      months: data.months ?? [],
+      cashSummary: data.cashSummary ?? EMPTY_CASH_SUMMARY,
+    };
   }, []);
 
   const applyDays = useCallback((monthKey: string, data: DaysResponse) => {
     setDays(data.days);
+    setCashSummary(data.cashSummary);
     setAvailableMonths(
       [...new Set([monthKey, ...data.months])].sort().reverse(),
     );
@@ -557,6 +593,71 @@ export default function ExternalTransportLedger() {
           </div>
         </article>
       </div>
+
+      <article
+        className={`external-cash-position ${cashSummary.cashOnHand >= 0 ? "cash-positive" : "cash-negative"}`}
+        data-testid="external-cash-position"
+      >
+        <section className="external-cash-hero">
+          <span>Tüm zamanlar · {cashSummary.dayCount} kayıtlı gün</span>
+          <h3>Kasada olması gereken net para</h3>
+          <strong>{formatCurrency(cashSummary.cashOnHand)}</strong>
+          <p>
+            Tahsil edilen toplam gelirden yalnızca ödenmiş giderler düşülmüştür.
+            Şoför ve araç kirası için ayrılan para kasanın içinde gösterilir.
+          </p>
+        </section>
+
+        <section className="external-cash-breakdown">
+          <div className="external-reserve-grid">
+            <article>
+              <span>Şoför için biriken</span>
+              <strong>{formatCurrency(cashSummary.driverReserve)}</strong>
+              <small>Ödenmek üzere kasada ayrılan</small>
+            </article>
+            <article>
+              <span>Araç kirası için biriken</span>
+              <strong>{formatCurrency(cashSummary.vehicleReserve)}</strong>
+              <small>Ödenmek üzere kasada ayrılan</small>
+            </article>
+            <article className={cashSummary.netResult >= 0 ? "profit" : "loss"}>
+              <span>Birikmiş net kâr / zarar</span>
+              <strong>{formatCurrency(cashSummary.netResult)}</strong>
+              <small>Tüm maliyetlerden sonraki sonuç</small>
+            </article>
+          </div>
+
+          <dl className="external-cash-reconciliation">
+            <div>
+              <dt>Toplam tahsil edilen gelir</dt>
+              <dd>{formatCurrency(cashSummary.income)}</dd>
+            </div>
+            <div>
+              <dt>Ödenen üyelik</dt>
+              <dd>− {formatCurrency(cashSummary.paidMembership)}</dd>
+            </div>
+            <div>
+              <dt>Ödenen yakıt</dt>
+              <dd>− {formatCurrency(cashSummary.paidFuel)}</dd>
+            </div>
+            {cashSummary.paidOther > 0 && (
+              <div>
+                <dt>Ödenen diğer giderler</dt>
+                <dd>− {formatCurrency(cashSummary.paidOther)}</dd>
+              </div>
+            )}
+            <div className="external-cash-total">
+              <dt>Kasada olması gereken</dt>
+              <dd>{formatCurrency(cashSummary.cashOnHand)}</dd>
+            </div>
+          </dl>
+
+          <p className="external-cash-formula">
+            Kontrol: Şoför birikimi + araç kirası birikimi + net kâr / zarar =
+            kasada olması gereken toplam.
+          </p>
+        </section>
+      </article>
     </section>
   );
 }

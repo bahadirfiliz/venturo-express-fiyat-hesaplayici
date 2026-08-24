@@ -121,6 +121,12 @@ test("ships the daily external transport income and expense ledger", async () =>
   assert.match(ledgerSource, /Toplam gelir/);
   assert.match(ledgerSource, /Toplam gider/);
   assert.match(ledgerSource, /Net bakiye/);
+  assert.match(ledgerSource, /Kasada olması gereken net para/);
+  assert.match(ledgerSource, /Şoför için biriken/);
+  assert.match(ledgerSource, /Araç kirası için biriken/);
+  assert.match(ledgerSource, /Birikmiş net kâr \/ zarar/);
+  assert.match(ledgerSource, /Ödenen üyelik/);
+  assert.match(ledgerSource, /Ödenen yakıt/);
   assert.match(ledgerSource, /Günlük kaydı güncelle/);
   assert.match(ledgerSource, /Düzenlemeyi iptal et/);
   assert.match(ledgerSource, /\{ label: "Üyelik", amount: "1000,00" \}/);
@@ -136,12 +142,23 @@ test("ships the daily external transport income and expense ledger", async () =>
   assert.match(apiSource, /apiAccessError\(\["admin"\]\)/);
   assert.match(apiSource, /ON CONFLICT \(entry_date\) DO UPDATE/);
   assert.match(apiSource, /export async function PATCH/);
+  assert.match(apiSource, /cashSummary: buildCashSummary/);
+  assert.match(apiSource, /label\.includes\("sofor"\)/);
+  assert.match(apiSource, /label\.includes\("arac kirasi"\)/);
   assert.match(databaseSource, /external_transport_expenses/);
   assert.match(migrationSource, /ON DELETE cascade/);
 
   const income = 1000;
   const expenses = [300, 50];
   assert.equal(income - expenses.reduce((sum, amount) => sum + amount, 0), 650);
+
+  const totalIncome = 10000;
+  const paidMembershipAndFuel = 1750;
+  const driverReserve = 3000;
+  const vehicleReserve = 3699;
+  const cashOnHand = totalIncome - paidMembershipAndFuel;
+  const netResult = cashOnHand - driverReserve - vehicleReserve;
+  assert.equal(cashOnHand, driverReserve + vehicleReserve + netResult);
 });
 
 test("preserves the verified price scenarios", async () => {
