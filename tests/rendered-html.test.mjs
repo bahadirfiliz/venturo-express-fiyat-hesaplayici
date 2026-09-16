@@ -106,13 +106,14 @@ test("keeps the Excel-derived data complete and internally consistent", async ()
 });
 
 test("ships the daily external transport income and expense ledger", async () => {
-  const [dashboardSource, ledgerSource, apiSource, databaseSource, migrationSource] =
+  const [dashboardSource, ledgerSource, apiSource, databaseSource, migrationSource, cashSource] =
     await Promise.all([
       readFile(new URL("app/admin-dashboard.tsx", projectRoot), "utf8"),
       readFile(new URL("app/external-transport-ledger.tsx", projectRoot), "utf8"),
       readFile(new URL("app/api/external-transport/route.ts", projectRoot), "utf8"),
       readFile(new URL("db/index.ts", projectRoot), "utf8"),
       readFile(new URL("drizzle/0002_whole_tombstone.sql", projectRoot), "utf8"),
+      readFile(new URL("app/lib/external-transport/cash-summary.ts", projectRoot), "utf8"),
     ]);
 
   assert.match(dashboardSource, /Harici Taşıma/);
@@ -143,8 +144,8 @@ test("ships the daily external transport income and expense ledger", async () =>
   assert.match(apiSource, /ON CONFLICT \(entry_date\) DO UPDATE/);
   assert.match(apiSource, /export async function PATCH/);
   assert.match(apiSource, /cashSummary: buildCashSummary/);
-  assert.match(apiSource, /label\.includes\("sofor"\)/);
-  assert.match(apiSource, /label\.includes\("arac kirasi"\)/);
+  assert.match(cashSource, /label\.includes\("sofor"\)/);
+  assert.match(cashSource, /label\.includes\("arac kirasi"\)/);
   assert.match(databaseSource, /external_transport_expenses/);
   assert.match(migrationSource, /ON DELETE cascade/);
 

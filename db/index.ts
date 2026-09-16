@@ -60,6 +60,18 @@ const createExternalTransportExpensesTableSql = `
   )
 `;
 
+const createExternalTransportDriverPaymentsTableSql = `
+  CREATE TABLE IF NOT EXISTS external_transport_driver_payments (
+    id TEXT PRIMARY KEY NOT NULL,
+    payment_date DATE NOT NULL,
+    amount NUMERIC(12, 2) NOT NULL CONSTRAINT external_transport_driver_payments_amount_positive CHECK (amount > 0),
+    note TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    voided_at TIMESTAMPTZ
+  )
+`;
+
 const createCustomerAccountsTableSql = `
   CREATE TABLE IF NOT EXISTS customer_accounts (
     id TEXT PRIMARY KEY NOT NULL,
@@ -181,12 +193,16 @@ export function ensureExternalTransportSchema(database = getSql()) {
   externalTransportSchemaPromise ??= (async () => {
     await database.unsafe(createExternalTransportDaysTableSql);
     await database.unsafe(createExternalTransportExpensesTableSql);
+    await database.unsafe(createExternalTransportDriverPaymentsTableSql);
     await Promise.all([
       database.unsafe(
         "CREATE INDEX IF NOT EXISTS external_transport_days_month_idx ON external_transport_days (month_key)",
       ),
       database.unsafe(
         "CREATE INDEX IF NOT EXISTS external_transport_expenses_day_idx ON external_transport_expenses (day_id)",
+      ),
+      database.unsafe(
+        "CREATE INDEX IF NOT EXISTS external_transport_driver_payments_date_idx ON external_transport_driver_payments (payment_date)",
       ),
     ]);
   })().catch((error) => {

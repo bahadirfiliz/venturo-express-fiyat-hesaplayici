@@ -1,5 +1,7 @@
 import { ensureExternalTransportSchema, getSql } from "../../../db";
 import { apiAccessError } from "../../lib/auth/session";
+import { buildCashSummary } from "../../lib/external-transport/cash-summary";
+import { serializeDriverSalaryPayment } from "../../lib/external-transport/driver-payments";
 
 type ExpenseInput = { label?: unknown; amount?: unknown };
 
@@ -85,81 +87,6 @@ function serializeDay(
   };
 }
 
-function normalizeExpenseLabel(value: unknown) {
-  return String(value ?? "")
-    .toLocaleLowerCase("tr-TR")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/ı/g, "i")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
-
-function expenseCategory(value: unknown) {
-  const label = normalizeExpenseLabel(value);
-  if (label.includes("sofor") || label.includes("surucu")) return "driver";
-  if (
-    label.includes("arac kirasi") ||
-    label.includes("araba kirasi") ||
-    label.includes("tasit kirasi")
-  ) {
-    return "vehicle";
-  }
-  if (label.includes("uyelik")) return "membership";
-  if (label.includes("yakit")) return "fuel";
-  return "other";
-}
-
-function roundMoney(value: number) {
-  return Math.round(value * 100) / 100;
-}
-
-function buildCashSummary(
-  dayRows: Array<Record<string, unknown>>,
-  expenseRows: Array<Record<string, unknown>>,
-) {
-  const income = dayRows.reduce(
-    (sum, day) => sum + Number(day.income_amount),
-    0,
-  );
-  const buckets = {
-    driverReserve: 0,
-    vehicleReserve: 0,
-    paidMembership: 0,
-    paidFuel: 0,
-    paidOther: 0,
-  };
-
-  for (const expense of expenseRows) {
-    const amount = Number(expense.amount);
-    const category = expenseCategory(expense.label);
-    if (category === "driver") buckets.driverReserve += amount;
-    else if (category === "vehicle") buckets.vehicleReserve += amount;
-    else if (category === "membership") buckets.paidMembership += amount;
-    else if (category === "fuel") buckets.paidFuel += amount;
-    else buckets.paidOther += amount;
-  }
-
-  const paidExpenses =
-    buckets.paidMembership + buckets.paidFuel + buckets.paidOther;
-  const cashOnHand = income - paidExpenses;
-  const netResult =
-    cashOnHand - buckets.driverReserve - buckets.vehicleReserve;
-
-  return {
-    dayCount: dayRows.length,
-    income: roundMoney(income),
-    paidExpenses: roundMoney(paidExpenses),
-    paidMembership: roundMoney(buckets.paidMembership),
-    paidFuel: roundMoney(buckets.paidFuel),
-    paidOther: roundMoney(buckets.paidOther),
-    driverReserve: roundMoney(buckets.driverReserve),
-    vehicleReserve: roundMoney(buckets.vehicleReserve),
-    netResult: roundMoney(netResult),
-    cashOnHand: roundMoney(cashOnHand),
-  };
-}
-
 function errorResponse(error: unknown, status = 400) {
   return Response.json(
     {
@@ -177,10 +104,10 @@ export async function GET(request: Request) {
     const database = getSql();
     await ensureExternalTransportSchema(database);
     const requestedMonth = new URL(request.url).searchParams.get("month") ?? "";
-    const monthKey = /^\d{4}-\d{2}$/.test(requestedMonth)
+    const monthKey = /^\d{4}-(0[1-9]|1[0-2])$/.test(requestedMonth) && Number(requestedMonth.slice(0, 4)) > 0
       ? requestedMonth
       : currentMonthInIstanbul();
-    const [dayRows, expenseRows, monthRows, allDayRows, allExpenseRows] = await Promise.all([
+    const [dayRows, expenseRows, monthRows, allDayRows, allExpenseRows, paymentRows, paidSalaryRows] = await Promise.all([
       database.unsafe(
         `SELECT * FROM external_transport_days
          WHERE month_key = $1
@@ -195,7 +122,11 @@ export async function GET(request: Request) {
         [monthKey],
       ),
       database.unsafe(
-        "SELECT DISTINCT month_key FROM external_transport_days ORDER BY month_key DESC",
+        `SELECT month_key FROM external_transport_days
+         UNION
+         SELECT to_char(payment_date, 'YYYY-MM') AS month_key
+         FROM external_transport_driver_payments WHERE voided_at IS NULL
+         ORDER BY month_key DESC`,
       ),
       database.unsafe(
         "SELECT id, income_amount FROM external_transport_days ORDER BY entry_date ASC",
@@ -205,6 +136,19 @@ export async function GET(request: Request) {
          FROM external_transport_expenses e
          INNER JOIN external_transport_days d ON d.id = e.day_id
          ORDER BY d.entry_date ASC, e.sort_order ASC`,
+      ),
+      database.unsafe(
+        `SELECT id, payment_date::text AS payment_date, amount, note, created_at, updated_at
+         FROM external_transport_driver_payments
+         WHERE voided_at IS NULL
+           AND payment_date >= ($1 || '-01')::date
+           AND payment_date < (($1 || '-01')::date + interval '1 month')
+         ORDER BY payment_date DESC, created_at DESC, id DESC`,
+        [monthKey],
+      ),
+      database.unsafe(
+        `SELECT COALESCE(sum(amount), 0) AS paid_driver_salary
+         FROM external_transport_driver_payments WHERE voided_at IS NULL`,
       ),
     ]);
     const days = dayRows as unknown as Array<Record<string, unknown>>;
@@ -222,7 +166,12 @@ export async function GET(request: Request) {
           expenses.filter((expense) => expense.day_id === day.id),
         ),
       ),
-      cashSummary: buildCashSummary(allDays, allExpenses),
+      driverPayments: (paymentRows as unknown as Array<Record<string, unknown>>).map(serializeDriverSalaryPayment),
+      cashSummary: buildCashSummary(
+        allDays,
+        allExpenses,
+        Number(paidSalaryRows[0]?.paid_driver_salary ?? 0),
+      ),
     });
   } catch (error) {
     return errorResponse(error, 500);

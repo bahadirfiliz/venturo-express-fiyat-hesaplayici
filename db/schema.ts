@@ -1,10 +1,15 @@
 import {
+  check,
+  date,
   doublePrecision,
   index,
   integer,
+  numeric,
   pgTable,
   text,
+  timestamp,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const courierJobs = pgTable(
   "courier_jobs",
@@ -74,6 +79,23 @@ export const externalTransportExpenses = pgTable(
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [index("external_transport_expenses_day_idx").on(table.dayId)],
+);
+
+export const externalTransportDriverPayments = pgTable(
+  "external_transport_driver_payments",
+  {
+    id: text("id").primaryKey(),
+    paymentDate: date("payment_date", { mode: "string" }).notNull(),
+    amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+    note: text("note").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" }).notNull(),
+    voidedAt: timestamp("voided_at", { withTimezone: true, mode: "string" }),
+  },
+  (table) => [
+    index("external_transport_driver_payments_date_idx").on(table.paymentDate),
+    check("external_transport_driver_payments_amount_positive", sql`${table.amount} > 0`),
+  ],
 );
 
 export const customerAccounts = pgTable(
