@@ -14,15 +14,14 @@ function displayDate(value: string) {
 
 type Props = {
   today: string;
-  month: string;
   payments: DriverSalaryPayment[];
   cashSummary: CashSummary;
   loading: boolean;
   ready: boolean;
-  onSaved: (date?: string) => Promise<void>;
+  onSaved: () => Promise<void>;
 };
 
-export default function DriverSalaryPayments({ today, month, payments, cashSummary, loading, ready, onSaved }: Props) {
+export default function DriverSalaryPayments({ today, payments, cashSummary, loading, ready, onSaved }: Props) {
   const [id, setId] = useState<string>(() => crypto.randomUUID());
   const [editing, setEditing] = useState<DriverSalaryPayment | null>(null);
   const [paymentDate, setPaymentDate] = useState(today);
@@ -91,12 +90,11 @@ export default function DriverSalaryPayments({ today, month, payments, cashSumma
       });
       const data = (await response.json()) as { payment?: DriverSalaryPayment; error?: string };
       if (!response.ok || !data.payment) throw new Error(data.error || "Maaş ödemesi kaydedilemedi.");
-      const savedDate = data.payment.paymentDate;
       const action = editing ? "güncellendi" : "kaydedildi";
       resetDraft();
       // Once the write is confirmed, a refresh failure must not encourage a duplicate payment.
       try {
-        await onSaved(savedDate);
+        await onSaved();
         setMessage(`Şoför maaş ödemesi ${action}. Kasa ve bekleyen birikim güncellendi.`);
       } catch {
         setMessage(`Şoför maaş ödemesi ${action}; kasa görünümü yenilenemedi. Yeni ödeme girmeden sayfayı yenileyin.`);
@@ -172,7 +170,7 @@ export default function DriverSalaryPayments({ today, month, payments, cashSumma
           {!ready && <p className="external-empty" role="status">Kasa verileri alınmadan ödeme girişi yapılamaz.</p>}
         </form>
         <section className="external-payment-history" aria-labelledby="driver-payment-history-title">
-          <div className="external-card-heading"><div><span>{month.split("-").reverse().join(".")} dönemi</span><h4 id="driver-payment-history-title">Maaş ödeme kayıtları</h4></div>
+          <div className="external-card-heading"><div><span>Tüm zamanlar</span><h4 id="driver-payment-history-title">Tarih tarih maaş ödemeleri</h4></div>
             <strong>{ready ? currency(payments.reduce((sum, payment) => sum + payment.amount, 0)) : "—"}</strong>
           </div>
           <div className="table-shell external-payment-shell">
@@ -180,7 +178,7 @@ export default function DriverSalaryPayments({ today, month, payments, cashSumma
               {loading ? <tr><td colSpan={4}>Ödemeler yükleniyor…</td></tr> : ready ? payments.length ? payments.map((payment) => <tr key={payment.id}>
                 <td>{displayDate(payment.paymentDate)}</td><td><b>{currency(payment.amount)}</b></td><td>{payment.note || "—"}</td>
                 <td><div className="external-row-actions"><button type="button" disabled={blocked} onClick={() => editPayment(payment)}>Düzenle</button><button type="button" disabled={blocked} className="danger" onClick={() => cancelPayment(payment)}>İptal et</button></div></td>
-              </tr>) : <tr><td colSpan={4}>Bu dönem için maaş ödemesi kaydedilmedi.</td></tr> : <tr><td colSpan={4}>Ödeme kayıtları alınamadı.</td></tr>}
+              </tr>) : <tr><td colSpan={4}>Henüz maaş ödemesi kaydedilmedi.</td></tr> : <tr><td colSpan={4}>Ödeme kayıtları alınamadı.</td></tr>}
             </tbody></table>
           </div>
           <p className="external-payment-help">Kısmi ödemeleri ayrı ayrı kaydedebilirsiniz. Hatalı kayıtlar iptal edildiğinde geçmiş kaydı veritabanında korunur.</p>

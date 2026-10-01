@@ -128,7 +128,10 @@ async function createApiHarness(accessStatus = 200) {
       }
       if (query.includes("UNION")) return results([...new Set(["2026-09", ...[...stored.values()].filter((row) => !row.voided_at).map((row) => row.payment_date.slice(0, 7))])].sort().reverse().map((month_key) => ({ month_key })));
       if (query.includes("sum(amount)")) return results([{ paid_driver_salary: [...stored.values()].filter((row) => !row.voided_at).reduce((sum, row) => sum + Number(row.amount), 0) }]);
-      if (query.includes("FROM external_transport_driver_payments")) return results([...stored.values()].filter((row) => !row.voided_at && row.payment_date.startsWith(params[0])).map((row) => ({ ...row })));
+      if (query.includes("FROM external_transport_driver_payments")) return results([...stored.values()]
+        .filter((row) => !row.voided_at)
+        .sort((left, right) => right.payment_date.localeCompare(left.payment_date))
+        .map((row) => ({ ...row })));
       if (query.includes("FROM external_transport_expenses")) return results(expenses.map((row) => ({ id: "expense", day_id: "day", sort_order: 0, ...row })));
       if (query.includes("FROM external_transport_days")) return results([{ ...days[0], id: "day", entry_date: "2026-09-16", month_key: "2026-09", created_at: "2026-09-16", updated_at: "2026-09-16" }]);
       throw new Error(`Unexpected test query: ${query}`);
@@ -187,13 +190,13 @@ test("the actual POST route is retry-safe and rejects reused IDs with different 
   assert.equal(Number(harness.stored.get(paymentId).amount), 10000);
 });
 
-test("the actual GET route includes paid salary exactly once and filters history by month", async () => {
+test("the actual GET route includes paid salary exactly once and returns all dated history", async () => {
   const harness = await createApiHarness();
   await harness.payments.POST(apiRequest("POST", { id: paymentId, paymentDate: "2026-08-31", amount: 10000 }));
   const response = await harness.ledger.GET(new Request("http://test/api/external-transport?month=2026-09"));
   const data = await response.json();
   assert.equal(response.status, 200);
-  assert.deepEqual(data.driverPayments, []);
+  assert.equal(data.driverPayments[0].paymentDate, "2026-08-31");
   assert.ok(data.months.includes("2026-08"));
   assert.equal(data.cashSummary.cashOnHand, 57277);
   assert.equal(data.cashSummary.driverReserve, 19000);

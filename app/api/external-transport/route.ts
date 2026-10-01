@@ -141,10 +141,7 @@ export async function GET(request: Request) {
         `SELECT id, payment_date::text AS payment_date, amount, note, created_at, updated_at
          FROM external_transport_driver_payments
          WHERE voided_at IS NULL
-           AND payment_date >= ($1 || '-01')::date
-           AND payment_date < (($1 || '-01')::date + interval '1 month')
          ORDER BY payment_date DESC, created_at DESC, id DESC`,
-        [monthKey],
       ),
       database.unsafe(
         `SELECT COALESCE(sum(amount), 0) AS paid_driver_salary

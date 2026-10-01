@@ -216,10 +216,8 @@ export default function ExternalTransportLedger() {
     return dataLoaded ? formatCurrency(value) : "—";
   }
 
-  async function refreshDriverPayments(date?: string) {
-    const month = date ? date.slice(0, 7) : selectedMonth;
-    await loadDays(month);
-    if (month !== selectedMonth) setSelectedMonth(month);
+  async function refreshDriverPayments() {
+    await loadDays(selectedMonth);
   }
 
   const totals = useMemo(() => {
@@ -685,7 +683,6 @@ export default function ExternalTransportLedger() {
       </article>
       <DriverSalaryPayments
         today={today}
-        month={selectedMonth}
         payments={driverPayments}
         cashSummary={cashSummary}
         loading={loading}
